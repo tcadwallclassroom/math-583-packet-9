@@ -1,0 +1,32 @@
+---
+title: "Packet 9 - Numerical Inference Lightning Round"
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+  encoding=encoding,
+  output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+author: "Todd CadwalladerOlsker"
+date: "*Last updated:* `r Sys.Date()`"
+output:
+  rmdformats::downcute:
+    downcute_theme: "chaos"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(rmdformats)
+library(openintro)
+library(tidyverse)
+library(gghighlight)
+library(formatR)
+library(infer)
+knitr::opts_chunk$set(echo = T, 
+                      cache = T, 
+                      eval = T, 
+                      cache.lazy = F, 
+                      warning = F)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=80),tidy=F)
+options(scipen = 999)
+```
+
