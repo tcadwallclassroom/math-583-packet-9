@@ -79,7 +79,7 @@ visualize(boot_dist) +
   shade_confidence_interval(endpoints = percentile_ci)
 ```
 
-Let's test the claim that the average american works more than 40 hours per week. That is, we are testing the null hypothesis that $\mu = 40$ and the alternative that $\mu > 40$. We'll do this by again bootstrapping our data, to estimate the variance.
+Let's test the claim that the average American works more than 40 hours per week. That is, we are testing the null hypothesis that $\mu = 40$ and the alternative that $\mu > 40$. We'll do this by again bootstrapping our data, to estimate the variance.
 
 ```{r hrs1 rando test}
 null_dist <- data %>%
@@ -94,3 +94,14 @@ visualize(null_dist) +
 null_dist %>%
   get_p_value(obs_stat = x_bar, direction = "two-sided")
 ```
+
+The "theoretical distribution" for a sample mean is the *t-statistic*. The idea is that we can't directly compute the z-score, since we don't know the standard deviation $\sigma$. Instead, we can only approximate the standard error with $s$, the sample standard deviation:
+
+\[SE = \frac{\sigma}{\sqrt{n}} \approx \frac{s}{\sqrt{n}} \]
+
+The t-score is calculated the same as a z-score:
+
+\[t = \frac{\bar{x}-\mu}{SE}\]
+
+Because the SE is calculated with $s$ rather than $\sigma$, there is a bit more variability in the t-distribution compared to the normal (z-) distribution. In other words, the t-distribution has a slightly lower peak and slightly fatter tails than the normal distribution. (See Introduction to Modern Statistics, p. 362)
+
