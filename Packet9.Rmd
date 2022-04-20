@@ -30,3 +30,67 @@ knitr::opts_chunk$set(tidy.opts=list(width.cutoff=80),tidy=F)
 options(scipen = 999)
 ```
 
+## Test for Inference on Numeric Variables
+
+We'll start by loading up some data from the GSS:
+
+```{r gss18}
+num_vars <- c("coninc", "hrs1")
+cat_vars <- c("sex", "satfin", "class", "wrkstat")
+my_vars <- c(num_vars, cat_vars)
+
+gss18 <- gss_get_yr(2018)
+data <- gss18
+data <- data %>% 
+  select(all_of(my_vars)) %>% 
+  mutate(
+    across(everything(), haven::zap_missing),
+    across(all_of(cat_vars), forcats::as_factor)
+  ) %>% 
+  mutate(
+    coninc = as.numeric(coninc),
+    hrs1 = as.numeric(hrs1)
+  ) ## The GSS data sometimes has trouble with numeric variables.
+```
+
+The `hrs1` variable records how many hours the respondent worked in the previous week. Let's find the mean for our sample:
+
+```{r hrs1 mean}
+data %>% drop_na(hrs1) %>% summarize(mean(hrs1))
+
+x_bar <- data %>% 
+  specify(response = hrs1) %>%
+  calculate(stat = "mean")
+x_bar
+```
+
+We can bootstrap a confidence interval for a range estimate:
+
+```{r hrs1 ci}
+boot_dist <- data %>%
+  specify(response = hrs1) %>%
+  generate(reps = 1000, type = "bootstrap") %>%
+  calculate(stat = "mean")
+
+percentile_ci <- get_ci(boot_dist)
+percentile_ci
+
+visualize(boot_dist) +
+  shade_confidence_interval(endpoints = percentile_ci)
+```
+
+Let's test the claim that the average american works more than 40 hours per week. That is, we are testing the null hypothesis that $\mu = 40$ and the alternative that $\mu > 40$. We'll do this by again bootstrapping our data, to estimate the variance.
+
+```{r hrs1 rando test}
+null_dist <- data %>%
+  specify(response = hrs1) %>%
+  hypothesize(null = "point", mu = 40) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "mean")
+
+visualize(null_dist) +
+  shade_p_value(obs_stat = x_bar, direction = "two-sided")
+
+null_dist %>%
+  get_p_value(obs_stat = x_bar, direction = "two-sided")
+```
