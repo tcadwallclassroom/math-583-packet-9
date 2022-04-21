@@ -21,6 +21,7 @@ library(tidyverse)
 library(gghighlight)
 library(formatR)
 library(infer)
+library(gssr)
 knitr::opts_chunk$set(echo = T, 
                       cache = T, 
                       eval = T, 
@@ -53,11 +54,28 @@ data <- data %>%
   ) ## The GSS data sometimes has trouble with numeric variables.
 ```
 
-The `hrs1` variable records how many hours the respondent worked in the previous week. Let's find the mean for our sample:
+The `hrs1` variable records how many hours the respondent worked in the previous week. 
+
+Let's examine the data before doing anything else:
+
+```{r}
+data %>% 
+  drop_na(hrs1) %>% 
+  summarize(mean = mean(hrs1),
+            sd = sd(hrs1),
+            median = median(hrs1)
+            )
+
+data %>% ggplot(aes(x = hrs1)) + 
+  geom_histogram(color = "black",
+                 fill = "forestgreen",
+                 bins = 20)
+```
+
+
+Let's find the mean for our sample:
 
 ```{r hrs1 mean}
-data %>% drop_na(hrs1) %>% summarize(mean(hrs1))
-
 x_bar <- data %>% 
   specify(response = hrs1) %>%
   calculate(stat = "mean")
@@ -75,7 +93,7 @@ boot_dist <- data %>%
 percentile_ci <- get_ci(boot_dist)
 percentile_ci
 
-visualize(boot_dist) +
+boot_dist %>% visualize() +
   shade_confidence_interval(endpoints = percentile_ci)
 ```
 
@@ -88,11 +106,11 @@ null_dist <- data %>%
   generate(reps = 10000, type = "bootstrap") %>%
   calculate(stat = "mean")
 
-visualize(null_dist) +
-  shade_p_value(obs_stat = x_bar, direction = "two-sided")
+null_dist %>% visualize() +
+  shade_p_value(obs_stat = x_bar, direction = "greater")
 
 null_dist %>%
-  get_p_value(obs_stat = x_bar, direction = "two-sided")
+  get_p_value(obs_stat = x_bar, direction = "greater")
 ```
 
 The "theoretical distribution" for a sample mean is the *t-statistic*. The idea is that we can't directly compute the z-score, since we don't know the standard deviation $\sigma$. Instead, we can only approximate the standard error with $s$, the sample standard deviation:
@@ -103,5 +121,60 @@ The t-score is calculated the same as a z-score:
 
 \[t = \frac{\bar{x}-\mu}{SE}\]
 
-Because the SE is calculated with $s$ rather than $\sigma$, there is a bit more variability in the t-distribution compared to the normal (z-) distribution. In other words, the t-distribution has a slightly lower peak and slightly fatter tails than the normal distribution. (See Introduction to Modern Statistics, p. 362)
+Because the SE is calculated with $s$ rather than $\sigma$, there is a bit more variability in the t-distribution compared to the normal (z-) distribution. In other words, the t-distribution has a slightly lower peak and slightly fatter tails than the normal distribution. (See Introduction to Modern Statistics, p. 362.) The more data we have, the more degrees of freedom in the t-distribution, and the more the t-distribution resembles a normal curve.
+
+We can have `infer` calculate a t-statistic, and compute a null distribution based on t as well:
+
+```{r}
+t <- data %>% 
+  specify(response = hrs1) %>%
+  calculate(stat = "t", mu = 40)
+t
+
+null_dist <- data %>%
+  specify(response = hrs1) %>%
+  hypothesize(null = "point", mu = 40) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "t")
+
+null_dist %>% visualize(method = "both") +
+  shade_p_value(obs_stat = t, direction = "greater")
+
+null_dist %>%
+  get_p_value(obs_stat = t, direction = "greater")
+```
+
+The theoretical t-test can also be run with an R function:
+
+```{r}
+ttest1 <- t.test(data$hrs1, mu = 40, alternative = "greater")
+ttest1
+ttest2 <- data %>% 
+  t_test(hrs1 ~ NULL, alternative = "greater")
+ttest2
+```
+
+As an aside, we can also test hypotheses involving the median. This is especially useful with highly skewed data. We don't have a "t-distribution" for the median, but we can still perform a randomization test:
+
+```{r}
+x_tilde <- data %>% 
+  specify(response = hrs1) %>%
+  calculate(stat = "median")
+x_tilde
+
+null_dist <- data %>%
+  specify(response = hrs1) %>%
+  hypothesize(null = "point", med = 40) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "median")
+
+null_dist %>% visualize() +
+  shade_p_value(obs_stat = x_tilde, direction = "greater")
+
+null_dist %>%
+  get_p_value(obs_stat = x_tilde, direction = "greater")
+```
+
+
+
 
