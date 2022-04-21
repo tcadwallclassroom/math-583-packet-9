@@ -36,7 +36,7 @@ options(scipen = 999)
 We'll start by loading up some data from the GSS:
 
 ```{r gss18}
-num_vars <- c("coninc", "hrs1")
+num_vars <- c("age", "coninc", "hrs1")
 cat_vars <- c("sex", "satfin", "class", "wrkstat")
 my_vars <- c(num_vars, cat_vars)
 
@@ -49,9 +49,8 @@ data <- data %>%
     across(all_of(cat_vars), forcats::as_factor)
   ) %>% 
   mutate(
-    coninc = as.numeric(coninc),
-    hrs1 = as.numeric(hrs1)
-  ) ## The GSS data sometimes has trouble with numeric variables.
+    across(all_of(num_vars), as.numeric)
+  ) ## GGS numeric variables don't play nicely with infer.
 ```
 
 The `hrs1` variable records how many hours the respondent worked in the previous week. 
@@ -175,6 +174,133 @@ null_dist %>%
   get_p_value(obs_stat = x_tilde, direction = "greater")
 ```
 
+What do you notice/wonder about our results?
+
+## Wildly non-normal data
+
+Let's do the same thing with the `poker` dataset from the OpenIntro package:
+
+```{r poker, eval=FALSE}
+library(openintro)
+help("poker")
+glimpse(poker)
+```
+
+The `winnings` variable indicates the amount of money won by a professional poker player on 50 randomply chosen days.
+
+Let's examine the data before doing anything else:
+
+```{r}
+poker %>% 
+  drop_na(winnings) %>% 
+  summarize(mean = mean(winnings),
+            sd = sd(winnings),
+            median = median(winnings)
+            )
+
+poker %>% ggplot(aes(x = winnings)) + 
+  geom_histogram(color = "black",
+                 fill = "forestgreen",
+                 bins = 30) +
+  labs(
+    x = "Winnings",
+    y = "Number of Days in Sample"
+  )
+
+```
 
 
+Let's find the mean for our sample:
+
+```{r poker mean}
+x_bar <- poker %>% 
+  specify(response = winnings) %>%
+  calculate(stat = "mean")
+x_bar
+```
+
+We can bootstrap a confidence interval for a range estimate:
+
+```{r poker ci}
+boot_dist <- poker %>%
+  specify(response = winnings) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "mean")
+
+percentile_ci <- get_ci(boot_dist)
+percentile_ci
+
+boot_dist %>% visualize() +
+  shade_confidence_interval(endpoints = percentile_ci)
+```
+
+Let's test the claim that the average winnings are over \$0 (that is, the professional poker player is actually making money!). That is, we are testing the null hypothesis that $\mu = 0$ and the alternative that $\mu > 0$. We'll do this by again bootstrapping our data, to estimate the variance.
+
+```{r poker rando test}
+null_dist <- poker %>%
+  specify(response = winnings) %>%
+  hypothesize(null = "point", mu = 0) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "mean")
+
+null_dist %>% visualize() +
+  shade_p_value(obs_stat = x_bar, direction = "greater")
+
+null_dist %>%
+  get_p_value(obs_stat = x_bar, direction = "greater")
+```
+
+Let's see what we get from the t-statistic, and compute a null distribution based on t as well:
+
+```{r}
+t <- poker %>% 
+  specify(response = winnings) %>%
+  calculate(stat = "t", mu = 0)
+t
+
+null_dist <- poker %>% 
+  specify(response = winnings) %>%
+  hypothesize(null = "point", mu = 0) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "t")
+
+null_dist %>% visualize(method = "both") +
+  shade_p_value(obs_stat = t, direction = "greater")
+
+null_dist %>%
+  get_p_value(obs_stat = t, direction = "greater")
+```
+
+What do you notice/wonder?
+
+## Difference in means
+
+Here's another possible question: are unemployed/laid off workers younger, on average, than full-time workers? We can calculate a *difference in means* for these groups, and determine if the difference is significant:
+
+```{r}
+data %>% 
+  drop_na(age) %>% 
+  group_by(wrkstat) %>% 
+  summarise(mean_age = mean(age))
+
+data %>% filter(wrkstat == "working fulltime") %>% 
+  drop_na(age) %>% 
+  summarize(mean_age = mean(age))
+
+data %>% filter(wrkstat == "unempl, laid off") %>% 
+  drop_na(age) %>% 
+  summarize(mean_age = mean(age))
+
+data %>% filter(wrkstat == "working fulltime" |
+                  wrkstat == "unempl, laid off") %>% 
+  drop_na(age) %>% 
+  ggplot(aes(x = age)) +
+  geom_histogram(aes(fill = wrkstat),
+                 color = "black",
+                 bins = 20) +
+  labs(
+    x = "Age",
+    y = "Number of respondents"
+  )
+```
 
