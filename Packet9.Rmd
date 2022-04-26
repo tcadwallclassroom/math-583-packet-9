@@ -89,7 +89,7 @@ boot_dist <- data %>%
   generate(reps = 1000, type = "bootstrap") %>%
   calculate(stat = "mean")
 
-percentile_ci <- get_ci(boot_dist)
+percentile_ci <- get_ci(boot_dist, level = 0.95)
 percentile_ci
 
 boot_dist %>% visualize() +
@@ -222,6 +222,7 @@ x_bar
 We can bootstrap a confidence interval for a range estimate:
 
 ```{r poker ci}
+
 boot_dist <- poker %>%
   specify(response = winnings) %>%
   generate(reps = 10000, type = "bootstrap") %>%
@@ -230,7 +231,7 @@ boot_dist <- poker %>%
 percentile_ci <- get_ci(boot_dist)
 percentile_ci
 
-boot_dist %>% visualize() +
+boot_dist %>% visualize(bins = 30) +
   shade_confidence_interval(endpoints = percentile_ci)
 ```
 
@@ -243,7 +244,7 @@ null_dist <- poker %>%
   generate(reps = 10000, type = "bootstrap") %>%
   calculate(stat = "mean")
 
-null_dist %>% visualize() +
+null_dist %>% visualize(bins = 30) +
   shade_p_value(obs_stat = x_bar, direction = "greater")
 
 null_dist %>%
@@ -297,10 +298,76 @@ data %>% filter(wrkstat == "working fulltime" |
   ggplot(aes(x = age)) +
   geom_histogram(aes(fill = wrkstat),
                  color = "black",
-                 bins = 20) +
+                 binwidth = 2) +
+  scale_fill_brewer(palette = "Dark2") +
   labs(
     x = "Age",
-    y = "Number of respondents"
+    y = "Number of respondents",
+    fill = "Work Status"
   )
 ```
 
+Using `infer`:
+
+```{r}
+
+data_twogroups <- data %>% 
+  drop_na(age) %>% 
+  filter(wrkstat == "working fulltime" |
+         wrkstat == "unempl, laid off") %>% 
+  droplevels()
+
+table(data_twogroups$wrkstat)
+
+d_hat <- data_twogroups %>% 
+  specify(response = age, explanatory = wrkstat) %>%
+  calculate(stat = "diff in means")
+d_hat
+
+### Bootstrap Conf. Interval
+
+boot_dist_d_hat <- data_twogroups %>%
+  specify(response = age, explanatory = wrkstat) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "diff in means")
+
+percentile_ci <- get_ci(boot_dist_d_hat, level = 0.95)
+percentile_ci
+
+boot_dist_d_hat %>% visualize(bins = 30) +
+  shade_confidence_interval(endpoints = percentile_ci)
+
+
+### Hypothesis test: Null: d_hat = 0
+
+null_dist_d_hat <- data_twogroups %>%
+  specify(response = age, explanatory = wrkstat) %>%
+  hypothesise(null = "independence") %>% 
+  generate(reps = 100000, type = "permute") %>%
+  calculate(stat = "diff in means")
+
+null_dist_d_hat %>% visualise(bins = 30) +
+  shade_p_value(obs_stat = d_hat, direction = "two-sided")
+
+null_dist_d_hat %>% 
+  get_p_value(obs_stat = d_hat, direction = "two-sided")
+
+### T-test:
+
+t <- data_twogroups %>% 
+  specify(response = age, explanatory = wrkstat) %>%
+  calculate(stat = "t")
+t
+
+null_dist_t <- data_twogroups %>%
+  specify(response = age, explanatory = wrkstat) %>%
+  hypothesise(null = "independence") %>% 
+  generate(reps = 100000, type = "permute") %>%
+  calculate(stat = "t")
+
+null_dist_t %>% visualise(bins = 30, method = "both") +
+  shade_p_value(obs_stat = t, direction = "two-sided")
+
+null_dist_t %>% 
+  get_p_value(obs_stat = t, direction = "two-sided")
+```
