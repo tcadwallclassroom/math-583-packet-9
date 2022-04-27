@@ -86,13 +86,13 @@ We can bootstrap a confidence interval for a range estimate:
 ```{r hrs1 ci}
 boot_dist <- data %>%
   specify(response = hrs1) %>%
-  generate(reps = 1000, type = "bootstrap") %>%
+  generate(reps = 10000, type = "bootstrap") %>%
   calculate(stat = "mean")
 
 percentile_ci <- get_ci(boot_dist, level = 0.95)
 percentile_ci
 
-boot_dist %>% visualize() +
+boot_dist %>% visualize(bins = 30) +
   shade_confidence_interval(endpoints = percentile_ci)
 ```
 
@@ -105,7 +105,7 @@ null_dist <- data %>%
   generate(reps = 10000, type = "bootstrap") %>%
   calculate(stat = "mean")
 
-null_dist %>% visualize() +
+null_dist %>% visualize(bins = 30) +
   shade_p_value(obs_stat = x_bar, direction = "greater")
 
 null_dist %>%
@@ -136,7 +136,7 @@ null_dist <- data %>%
   generate(reps = 10000, type = "bootstrap") %>%
   calculate(stat = "t")
 
-null_dist %>% visualize(method = "both") +
+null_dist %>% visualize(method = "both", bins = 30) +
   shade_p_value(obs_stat = t, direction = "greater")
 
 null_dist %>%
@@ -167,7 +167,7 @@ null_dist <- data %>%
   generate(reps = 10000, type = "bootstrap") %>%
   calculate(stat = "median")
 
-null_dist %>% visualize() +
+null_dist %>% visualize(bins = 30) +
   shade_p_value(obs_stat = x_tilde, direction = "greater")
 
 null_dist %>%
@@ -265,7 +265,7 @@ null_dist <- poker %>%
   generate(reps = 10000, type = "bootstrap") %>%
   calculate(stat = "t")
 
-null_dist %>% visualize(method = "both") +
+null_dist %>% visualize(method = "both",bins = 30) +
   shade_p_value(obs_stat = t, direction = "greater")
 
 null_dist %>%
@@ -274,27 +274,49 @@ null_dist %>%
 
 What do you notice/wonder?
 
+## T-test for paired data
+
+Take a look at the `textbooks` data set in `openintro`. We are interested in the question, "Are textbooks more expensive at the UCLA bookstore than they are at Amazon?"
+
+```{r}
+x_bar <- textbooks %>% 
+  specify(response = diff) %>% 
+  calculate(stat = "mean")
+x_bar
+
+null_dist <- textbooks %>% 
+  specify(response = diff) %>%
+  hypothesize(null = "point", mu = 0) %>% 
+  generate(reps = 10000, type = "bootstrap") %>% 
+  calculate(stat = "mean")
+
+null_dist %>% visualise(bins = 30)+
+  shade_p_value(obs_stat = x_bar, direction = "two-sided")
+
+null_dist %>% get_p_value(obs_stat = x_bar, direction = "two-sided")
+```
+
+
 ## Difference in means
 
 Here's another possible question: are unemployed/laid off workers younger, on average, than full-time workers? We can calculate a *difference in means* for these groups, and determine if the difference is significant:
 
 ```{r}
+data <- data %>% 
+  drop_na(age)
+
 data %>% 
-  drop_na(age) %>% 
   group_by(wrkstat) %>% 
   summarise(mean_age = mean(age))
 
 data %>% filter(wrkstat == "working fulltime") %>% 
-  drop_na(age) %>% 
   summarize(mean_age = mean(age))
 
 data %>% filter(wrkstat == "unempl, laid off") %>% 
-  drop_na(age) %>% 
   summarize(mean_age = mean(age))
 
 data %>% filter(wrkstat == "working fulltime" |
                   wrkstat == "unempl, laid off") %>% 
-  drop_na(age) %>% 
   ggplot(aes(x = age)) +
   geom_histogram(aes(fill = wrkstat),
                  color = "black",
@@ -312,7 +334,6 @@ Using `infer`:
 ```{r}
 
 data_twogroups <- data %>% 
-  drop_na(age) %>% 
   filter(wrkstat == "working fulltime" |
          wrkstat == "unempl, laid off") %>% 
   droplevels()
@@ -343,7 +364,7 @@ boot_dist_d_hat %>% visualize(bins = 30) +
 null_dist_d_hat <- data_twogroups %>%
   specify(response = age, explanatory = wrkstat) %>%
   hypothesise(null = "independence") %>% 
-  generate(reps = 100000, type = "permute") %>%
+  generate(reps = 10000, type = "permute") %>%
   calculate(stat = "diff in means")
 
 null_dist_d_hat %>% visualise(bins = 30) +
@@ -362,7 +383,7 @@ t
 null_dist_t <- data_twogroups %>%
   specify(response = age, explanatory = wrkstat) %>%
   hypothesise(null = "independence") %>% 
-  generate(reps = 100000, type = "permute") %>%
+  generate(reps = 10000, type = "permute") %>%
   calculate(stat = "t")
 
 null_dist_t %>% visualise(bins = 30, method = "both") +
@@ -370,4 +391,49 @@ null_dist_t %>% visualise(bins = 30, method = "both") +
 
 null_dist_t %>% 
   get_p_value(obs_stat = t, direction = "two-sided")
+```
+
+
+
+## Analysis of Variance (ANOVA)
+
+Look again at the GSS data on work status and age. Rather than examine each pair of groups, we want to test the null hypothesis of whther these two variables are independent across all the groups. In order ot examine this, we'll conduct an Analysis of Variance, also known as an ANOVA or F-test.
+
+The test statistic, F, is defined as the *ratio of the mean square between groups (MSG) and the mean square error (MSE)*. :
+
+\begin{align*}
+F &= \frac{MSG}{MSE}
+\end{align}
+
+Both MSE and MSG are complicated to calculate, but roughly speaking, MSG is the variance *between* group means, where MSE is the variance *within*  groups. 
+
+```{r}
+F_stat <- data %>% 
+  specify(response = age, explanatory = wrkstat) %>% 
+  calculate(stat = "F")
+
+F_null_dist<- data %>% 
+  specify(response = age, explanatory = wrkstat) %>% 
+  hypothesise(null = "independence") %>% 
+  generate(reps = 10000, type = "permute") %>% 
+  calculate(stat = "F")
+
+F_null_dist %>% visualise(bins = 30, method = "both") +
+  shade_p_value(obs_stat = F_stat, direction = "greater")
+
+F_null_dist %>% 
+  get_p_value(obs_stat = F_stat, direction = "greater")
+```
+
+You can run an ANOVA in R using the code:
+
+```{r}
+data %>% 
+    group_by(wrkstat) %>% 
+    summarise(mean_age = mean(age))
+
+model <- lm(age ~ wrkstat, data = data)
+model
+
+anova(model)
 ```
