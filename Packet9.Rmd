@@ -41,8 +41,8 @@ cat_vars <- c("sex", "satfin", "class", "wrkstat")
 my_vars <- c(num_vars, cat_vars)
 
 gss18 <- gss_get_yr(2018)
-data <- gss18
-data <- data %>% 
+gss_data <- gss18
+gss_data <- gss_data %>% 
   select(all_of(my_vars)) %>% 
   mutate(
     across(everything(), haven::zap_missing),
@@ -58,14 +58,14 @@ The `hrs1` variable records how many hours the respondent worked in the previous
 Let's examine the data before doing anything else:
 
 ```{r}
-data %>% 
+gss_data %>% 
   drop_na(hrs1) %>% 
   summarize(mean = mean(hrs1),
             sd = sd(hrs1),
             median = median(hrs1)
             )
 
-data %>% ggplot(aes(x = hrs1)) + 
+gss_data %>% ggplot(aes(x = hrs1)) + 
   geom_histogram(color = "black",
                  fill = "forestgreen",
                  bins = 20)
@@ -75,7 +75,7 @@ data %>% ggplot(aes(x = hrs1)) +
 Let's find the mean for our sample:
 
 ```{r hrs1 mean}
-x_bar <- data %>% 
+x_bar <- gss_data %>% 
   specify(response = hrs1) %>%
   calculate(stat = "mean")
 x_bar
@@ -84,7 +84,7 @@ x_bar
 We can bootstrap a confidence interval for a range estimate:
 
 ```{r hrs1 ci}
-boot_dist <- data %>%
+boot_dist <- gss_data %>%
   specify(response = hrs1) %>%
   generate(reps = 10000, type = "bootstrap") %>%
   calculate(stat = "mean")
@@ -99,7 +99,7 @@ boot_dist %>% visualize(bins = 30) +
 Let's test the claim that the average American works more than 40 hours per week. That is, we are testing the null hypothesis that $\mu = 40$ and the alternative that $\mu > 40$. We'll do this by again bootstrapping our data, to estimate the variance.
 
 ```{r hrs1 rando test}
-null_dist <- data %>%
+null_dist <- gss_data %>%
   specify(response = hrs1) %>%
   hypothesize(null = "point", mu = 40) %>%
   generate(reps = 10000, type = "bootstrap") %>%
@@ -125,12 +125,12 @@ Because the SE is calculated with $s$ rather than $\sigma$, there is a bit more 
 We can have `infer` calculate a t-statistic, and compute a null distribution based on t as well:
 
 ```{r}
-t <- data %>% 
+t <- gss_data %>% 
   specify(response = hrs1) %>%
   calculate(stat = "t", mu = 40)
 t
 
-null_dist <- data %>%
+null_dist <- gss_data %>%
   specify(response = hrs1) %>%
   hypothesize(null = "point", mu = 40) %>%
   generate(reps = 10000, type = "bootstrap") %>%
@@ -146,9 +146,9 @@ null_dist %>%
 The theoretical t-test can also be run with an R function:
 
 ```{r}
-ttest1 <- t.test(data$hrs1, mu = 40, alternative = "greater")
+ttest1 <- t.test(gss_data$hrs1, mu = 40, alternative = "greater")
 ttest1
-ttest2 <- data %>% 
+ttest2 <- gss_data %>% 
   t_test(hrs1 ~ NULL, alternative = "greater")
 ttest2
 ```
@@ -156,12 +156,12 @@ ttest2
 As an aside, we can also test hypotheses involving the median. This is especially useful with highly skewed data. We don't have a "t-distribution" for the median, but we can still perform a randomization test:
 
 ```{r}
-x_tilde <- data %>% 
+x_tilde <- gss_data %>% 
   specify(response = hrs1) %>%
   calculate(stat = "median")
 x_tilde
 
-null_dist <- data %>%
+null_dist <- gss_data %>%
   specify(response = hrs1) %>%
   hypothesize(null = "point", med = 40) %>%
   generate(reps = 10000, type = "bootstrap") %>%
@@ -299,28 +299,88 @@ null_dist %>% get_p_value(obs_stat = x_bar, direction = "two-sided")
 
 ## Difference in means
 
+Look at the `ncbirths` data set in the `openintro` package. View the data and help file to get a sense of what this data set contains. We are interested in the question, "Is the average weight of babies born to mothers who smoke different than that of babies born to mothers who do not?"
+
+Before trying to run any analysis, calculate the mean weight for each group, then create a set of stacked boxplots for the weights of each group. 
+
+Now, we can use the `infer` package to run tests similar to the above: The big difference is that we will have both a response variable *and* an explanatory variable. Let's start with a confidence interval for the *mean difference between the groups*: 
+
+```{r}
+ncbirths <- ncbirths %>% 
+  drop_na(weight, habit)
+
+ncb_d_hat <- ncbirths %>% 
+  specify(response = weight, explanatory = habit) %>%
+  calculate(stat = "diff in means", order = c("smoker", "nonsmoker"))
+ncb_d_hat
+
+### Bootstrap Conf. Interval
+
+ncb_boot_dist_d_hat <- ncbirths %>%
+  specify(response = weight, explanatory = habit) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "diff in means", order = c("smoker", "nonsmoker"))
+
+ncb_percentile_ci <- get_ci(ncb_boot_dist_d_hat, level = 0.95)
+ncb_percentile_ci
+
+ncb_boot_dist_d_hat %>% visualize(bins = 30) +
+  shade_confidence_interval(endpoints = ncb_percentile_ci)
+
+```
+
+Now, we can calculate the t statistic, to see how unusual this difference is. Here we want to find the t-score of the difference between the groups, to see if it is different from 0. The t-statistic is the mean of the difference between the two groups, minus 0 (the null hypothesis is that the difference is 0), divided by the standard error, where:
+
+\[SE = \sqrt{\frac{s_1^2}{n_1}+\frac{s_2^2}{n_2}}\]
+
+```{r}
+
+ncb_t_hat <- ncbirths %>% 
+  specify(response = weight, explanatory = habit) %>%
+  calculate(stat = "t", order = c("smoker", "nonsmoker"))
+ncb_t_hat
+
+ncb_null_dist_t <- ncbirths %>%
+  specify(response = weight, explanatory = habit) %>%
+  hypothesise(null = "independence") %>% 
+  generate(reps = 10000, type = "permute") %>% 
+  calculate(stat = "t", order = c("smoker", "nonsmoker"))
+
+ncb_null_dist_t %>% visualise(bins = 30, method = "both") +
+  shade_p_value(obs_stat = ncb_t_hat, direction = "two-sided")
+
+ncb_null_dist_t %>% 
+  get_p_value(obs_stat = ncb_t_hat, direction = "two-sided")
+```
+
+
+
+## GSS Example
+
 Here's another possible question: are unemployed/laid off workers younger, on average, than full-time workers? We can calculate a *difference in means* for these groups, and determine if the difference is significant:
 
 ```{r}
-data <- data %>% 
+gss_data <- gss_data %>% 
   drop_na(age)
 
-data %>% 
+gss_data %>% 
   group_by(wrkstat) %>% 
   summarise(mean_age = mean(age))
 
-data %>% filter(wrkstat == "working fulltime") %>% 
+gss_data %>% filter(wrkstat == "working fulltime") %>% 
   summarize(mean_age = mean(age))
 
-data %>% filter(wrkstat == "unempl, laid off") %>% 
+gss_data %>% filter(wrkstat == "unempl, laid off") %>% 
   summarize(mean_age = mean(age))
 
-data %>% filter(wrkstat == "working fulltime" |
+gss_data %>% filter(wrkstat == "working fulltime" |
                   wrkstat == "unempl, laid off") %>% 
   ggplot(aes(x = age)) +
   geom_histogram(aes(fill = wrkstat),
                  color = "black",
-                 binwidth = 2) +
+                 binwidth = 2,
+                 alpha = 0.5,
+                 position = "identity") +
   scale_fill_brewer(palette = "Dark2") +
   labs(
     x = "Age",
@@ -333,64 +393,49 @@ Using `infer`:
 
 ```{r}
 
-data_twogroups <- data %>% 
+gss_data_twogroups <- gss_data %>% 
   filter(wrkstat == "working fulltime" |
          wrkstat == "unempl, laid off") %>% 
   droplevels()
 
-table(data_twogroups$wrkstat)
+table(gss_data_twogroups$wrkstat)
 
-d_hat <- data_twogroups %>% 
+gss_d_hat <- gss_data_twogroups %>% 
   specify(response = age, explanatory = wrkstat) %>%
   calculate(stat = "diff in means")
-d_hat
+gss_d_hat
 
 ### Bootstrap Conf. Interval
 
-boot_dist_d_hat <- data_twogroups %>%
+gss_boot_dist_d_hat <- gss_data_twogroups %>%
   specify(response = age, explanatory = wrkstat) %>%
   generate(reps = 10000, type = "bootstrap") %>%
   calculate(stat = "diff in means")
 
-percentile_ci <- get_ci(boot_dist_d_hat, level = 0.95)
-percentile_ci
+gss_percentile_ci <- get_ci(gss_boot_dist_d_hat, level = 0.95)
+gss_percentile_ci
 
-boot_dist_d_hat %>% visualize(bins = 30) +
-  shade_confidence_interval(endpoints = percentile_ci)
-
-
-### Hypothesis test: Null: d_hat = 0
-
-null_dist_d_hat <- data_twogroups %>%
-  specify(response = age, explanatory = wrkstat) %>%
-  hypothesise(null = "independence") %>% 
-  generate(reps = 10000, type = "permute") %>%
-  calculate(stat = "diff in means")
-
-null_dist_d_hat %>% visualise(bins = 30) +
-  shade_p_value(obs_stat = d_hat, direction = "two-sided")
-
-null_dist_d_hat %>% 
-  get_p_value(obs_stat = d_hat, direction = "two-sided")
+gss_boot_dist_d_hat %>% visualize(bins = 30) +
+  shade_confidence_interval(endpoints = gss_percentile_ci)
 
 ### T-test:
 
-t <- data_twogroups %>% 
+gss_t_hat <- gss_data_twogroups %>% 
   specify(response = age, explanatory = wrkstat) %>%
   calculate(stat = "t")
-t
+gss_t_hat
 
-null_dist_t <- data_twogroups %>%
+null_dist_t <- gss_data_twogroups %>%
   specify(response = age, explanatory = wrkstat) %>%
   hypothesise(null = "independence") %>% 
   generate(reps = 10000, type = "permute") %>%
   calculate(stat = "t")
 
 null_dist_t %>% visualise(bins = 30, method = "both") +
-  shade_p_value(obs_stat = t, direction = "two-sided")
+  shade_p_value(obs_stat = gss_t_hat, direction = "two-sided")
 
 null_dist_t %>% 
-  get_p_value(obs_stat = t, direction = "two-sided")
+  get_p_value(obs_stat = gss_t_hat, direction = "two-sided")
 ```
 
 
@@ -408,32 +453,33 @@ F &= \frac{MSG}{MSE}
 Both MSE and MSG are complicated to calculate, but roughly speaking, MSG is the variance *between* group means, where MSE is the variance *within*  groups. 
 
 ```{r}
-F_stat <- data %>% 
+gss_F_stat <- gss_data %>% 
   specify(response = age, explanatory = wrkstat) %>% 
   calculate(stat = "F")
 
-F_null_dist<- data %>% 
+gss_F_null_dist<- gss_data %>% 
   specify(response = age, explanatory = wrkstat) %>% 
   hypothesise(null = "independence") %>% 
   generate(reps = 10000, type = "permute") %>% 
   calculate(stat = "F")
 
-F_null_dist %>% visualise(bins = 30, method = "both") +
-  shade_p_value(obs_stat = F_stat, direction = "greater")
+gss_F_null_dist %>% visualise(bins = 30, method = "both") +
+  shade_p_value(obs_stat = gss_F_stat, direction = "greater")
 
-F_null_dist %>% 
-  get_p_value(obs_stat = F_stat, direction = "greater")
+gss_F_null_dist %>% 
+  get_p_value(obs_stat = gss_F_stat, direction = "greater")
 ```
 
 You can run an ANOVA in R using the code:
 
 ```{r}
-data %>% 
+gss_data %>% 
     group_by(wrkstat) %>% 
     summarise(mean_age = mean(age))
 
-model <- lm(age ~ wrkstat, data = data)
-model
-
-anova(model)
+gss_model <- lm(age ~ wrkstat, data = gss_data)
+gss_model
+anova(gss_model)
 ```
+
+Try running similar tests with the `classdata` set from `openintro`.
