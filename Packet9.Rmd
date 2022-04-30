@@ -381,7 +381,7 @@ gss_data %>% filter(wrkstat == "working fulltime" |
                  binwidth = 2,
                  alpha = 0.5,
                  position = "identity") +
-  scale_fill_brewer(palette = "Dark2") +
+  scale_fill_brewer(palette = "Set1") +
   labs(
     x = "Age",
     y = "Number of respondents",
@@ -448,7 +448,7 @@ The test statistic, F, is defined as the *ratio of the mean square between group
 
 \begin{align*}
 F &= \frac{MSG}{MSE}
-\end{align}
+\end{align*}
 
 Both MSE and MSG are complicated to calculate, but roughly speaking, MSG is the variance *between* group means, where MSE is the variance *within*  groups. 
 
@@ -463,7 +463,7 @@ gss_F_null_dist<- gss_data %>%
   generate(reps = 10000, type = "permute") %>% 
   calculate(stat = "F")
 
-gss_F_null_dist %>% visualise(bins = 30, method = "both") +
+gss_F_null_dist %>% visualise(bins = 30, method = "both") #+
   shade_p_value(obs_stat = gss_F_stat, direction = "greater")
 
 gss_F_null_dist %>% 
